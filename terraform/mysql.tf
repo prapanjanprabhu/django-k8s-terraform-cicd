@@ -16,7 +16,7 @@ resource "kubernetes_persistent_volume_claim" "mysql" {
     }
   }
 
-  # The PV is bound by the cluster; don't fight it on subsequent plans.
+ 
   lifecycle {
     ignore_changes = [spec[0].resources[0].limits]
   }

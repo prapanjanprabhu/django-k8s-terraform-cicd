@@ -1,7 +1,5 @@
 locals {
-  # Mirrors the env list in django-deployment.yaml, in the same order.
-  # `env` is an ordered list in the provider, so order is significant:
-  # reordering here produces a spurious diff on every plan.
+
   django_env = [
     { name = "DJANGO_SECRET_KEY", value = null, secret = "DJANGO_SECRET_KEY" },
     { name = "DB_NAME", value = var.mysql_database, secret = null },
