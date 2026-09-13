@@ -141,22 +141,21 @@ jobs:
         with:
           persist-credentials: false
       - name: Check deploy runner access
-        shell: powershell
+        shell: cmd
         env:
           KUBE_CONTEXT: ${{ vars.KUBE_CONTEXT || 'minikube' }}
         run: |
-          kubectl --context "$env:KUBE_CONTEXT" get nodes
-          kubectl --context "$env:KUBE_CONTEXT" -n wrapzy get pods
+          kubectl --context "%KUBE_CONTEXT%" get nodes
+          kubectl --context "%KUBE_CONTEXT%" -n wrapzy get pods
       - name: Apply resources and verify rollout
-        shell: powershell
+        shell: cmd
         env:
           IMAGE: prapanjanprabhu/wrapzy:${{ github.sha }}
           KUBE_CONTEXT: ${{ vars.KUBE_CONTEXT || 'minikube' }}
           PYTHON_BIN: python
         run: |
-          $bash = "C:\Program Files\Git\bin\bash.exe"
-          if (!(Test-Path $bash)) {
-            throw "Git Bash not found at $bash. Install Git for Windows on the self-hosted runner."
-          }
-          $workspace = $env:GITHUB_WORKSPACE -replace "\\", "/"
-          & $bash -lc "cd '$workspace' && IMAGE='$env:IMAGE' KUBE_CONTEXT='$env:KUBE_CONTEXT' PYTHON_BIN='$env:PYTHON_BIN' bash scripts/deploy.sh"
+          if not exist "C:\Program Files\Git\bin\bash.exe" (
+            echo Git Bash not found at C:\Program Files\Git\bin\bash.exe. Install Git for Windows on the self-hosted runner.
+            exit /b 1
+          )
+          "%ProgramFiles%\Git\bin\bash.exe" -lc "cd ""$(cygpath -u ""$GITHUB_WORKSPACE"")"" && IMAGE=""$IMAGE"" KUBE_CONTEXT=""$KUBE_CONTEXT"" PYTHON_BIN=""$PYTHON_BIN"" bash scripts/deploy.sh"
