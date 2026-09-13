@@ -15,7 +15,7 @@ kubectl() {
   echo "$*" >> "$CALLS"
   case "$*" in
     *"get secret"*) printf '%s' "$SECRET_JSON" ;;
-    *"set image"*) printf '%s' "$DEPLOYMENT_JSON" ;;
+    *"set image deployment/django"*) touch "$APPLIED" ;;
     *"create -f"*) echo job.batch/django-migrate-test ;;
     *"get deployment django"*) printf '%s' "$PREVIOUS" ;;
     *"wait --for=condition=complete"*) [[ "$SCENARIO" != migration_failure ]] || return 1 ;;
@@ -23,7 +23,6 @@ kubectl() {
       if [[ "$SCENARIO" == rollout_failure || "$SCENARIO" == first_failure ]]; then
         if [[ -f "$APPLIED" && ! -f "$UNDONE" ]]; then return 1; fi
       fi ;;
-    *"apply -f"*"deployment.json"*) touch "$APPLIED" ;;
     *"rollout undo"*) touch "$UNDONE" ;;
   esac
   return 0
@@ -76,6 +75,6 @@ class DeployTests(unittest.TestCase):
         result, calls = self.run_scenario('migration_failure')
         self.assertNotEqual(result.returncode, 0)
         self.assertIn('Migration failed', result.stdout)
-        self.assertNotIn('apply -f', '\n'.join(line for line in calls.splitlines()
-                                             if 'deployment.json' in line))
+        self.assertNotIn('apply -f k8s/django-deployment.yaml', calls)
+        self.assertNotIn('set image deployment/django', calls)
         self.assertNotIn('rollout undo', calls)
