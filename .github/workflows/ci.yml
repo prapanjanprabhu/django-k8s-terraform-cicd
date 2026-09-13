@@ -133,7 +133,7 @@ jobs:
     name: Deploy to Minikube
     needs: publish
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    runs-on: [self-hosted, wrapzy-deploy]
+    runs-on: [self-hosted, Windows, wrapzy-deploy]
     environment: minikube
     timeout-minutes: 8
     steps:
@@ -141,15 +141,22 @@ jobs:
         with:
           persist-credentials: false
       - name: Check deploy runner access
-        shell: bash
+        shell: powershell
         env:
           KUBE_CONTEXT: ${{ vars.KUBE_CONTEXT || 'minikube' }}
         run: |
-          kubectl --context "${KUBE_CONTEXT:-minikube}" get nodes
-          kubectl --context "${KUBE_CONTEXT:-minikube}" -n wrapzy get pods || true
+          kubectl --context "$env:KUBE_CONTEXT" get nodes
+          kubectl --context "$env:KUBE_CONTEXT" -n wrapzy get pods
       - name: Apply resources and verify rollout
-        shell: bash
+        shell: powershell
         env:
           IMAGE: prapanjanprabhu/wrapzy:${{ github.sha }}
           KUBE_CONTEXT: ${{ vars.KUBE_CONTEXT || 'minikube' }}
-        run: bash scripts/deploy.sh
+          PYTHON_BIN: python
+        run: |
+          $bash = "C:\Program Files\Git\bin\bash.exe"
+          if (!(Test-Path $bash)) {
+            throw "Git Bash not found at $bash. Install Git for Windows on the self-hosted runner."
+          }
+          $workspace = $env:GITHUB_WORKSPACE -replace "\\", "/"
+          & $bash -lc "cd '$workspace' && IMAGE='$env:IMAGE' KUBE_CONTEXT='$env:KUBE_CONTEXT' PYTHON_BIN='$env:PYTHON_BIN' bash scripts/deploy.sh"
