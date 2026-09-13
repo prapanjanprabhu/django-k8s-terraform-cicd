@@ -33,6 +33,33 @@ The current workflow implements CI only: it does not build or publish images, de
 
 ## Architecture
 
+### Complete system overview
+
+![Complete project architecture: CI, manual image delivery, Terraform or kubectl deployment, and the Django/MySQL Kubernetes runtime](docs/architecture.svg)
+
+[Open the full-size architecture diagram](docs/architecture.svg). The diagram is stored in the repository as an SVG, so it displays directly in the README without requiring Mermaid support.
+
+**How the system works:**
+
+1. A push or pull request to `main` starts GitHub Actions with Python and a disposable MySQL database.
+2. CI waits for its database, runs Django's system check, and invokes the test command.
+3. The developer builds an application image containing the migration files and pushes it to a container registry.
+4. Terraform or `kubectl` applies the application resources to an existing Kubernetes cluster.
+5. Browser requests reach `django-service`, which routes traffic to the Django pod on port `8000`.
+6. Django connects through `mysql-service:3306`; MySQL stores data on the volume requested by `mysql-pvc`.
+
+| Boundary | Responsibility |
+| --- | --- |
+| GitHub Actions | Validate repository changes using an isolated CI database |
+| Container registry | Store the application image pulled by Kubernetes |
+| Terraform / Kubernetes manifests | Define and manage deployment resources |
+| Django application | Handle storefront, authentication, carts, and order requests |
+| MySQL and persistent volume | Store application records across pod replacement |
+| Kubernetes Secrets | Supply the configured application and database credentials |
+
+The following diagrams provide editable, focused views of each part of the system.
+
+
 ### Source, CI, and deployment
 
 ```mermaid

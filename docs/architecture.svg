@@ -1,0 +1,87 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="1050" viewBox="0 0 1200 1050" role="img" aria-labelledby="title desc">
+<title id="title">Django Kubernetes Terraform CI/CD architecture</title>
+<desc id="desc">Source changes trigger isolated GitHub Actions checks. Developers manually build and publish images and deploy with Terraform or kubectl. Browser traffic reaches Django through a NodePort Service, and Django connects to MySQL backed by a persistent volume.</desc>
+<defs><marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto"><path d="M0,0 L0,6 L9,3 z" fill="#64748b"/></marker></defs>
+<rect width="1200" height="1050" fill="#f8fafc"/>
+<g font-family="Arial, Helvetica, sans-serif">
+<text x="40" y="48" font-size="28" font-weight="700" fill="#0f172a">Django Kubernetes Terraform CI/CD</text>
+<text x="40" y="77" font-size="16" fill="#475569">Wrapzy application • implemented architecture • manual deployment</text>
+<rect x="30" y="100" width="1140" height="190" rx="16" fill="#fff" stroke="#cbd5e1"/><text x="50" y="130" font-size="17" font-weight="700" fill="#334155">01 / SOURCE AND CONTINUOUS INTEGRATION</text>
+<rect x="55" y="158" width="220" height="82" rx="10" fill="#eff6ff" stroke="#94a3b8"/>
+<text x="165" y="185" text-anchor="middle" font-size="16" font-weight="700" fill="#0f172a">GitHub repository</text>
+<text x="165" y="206" text-anchor="middle" font-size="14" font-weight="400" fill="#0f172a">Push / pull request to main</text>
+<rect x="345" y="158" width="230" height="82" rx="10" fill="#eff6ff" stroke="#94a3b8"/>
+<text x="460" y="185" text-anchor="middle" font-size="16" font-weight="700" fill="#0f172a">GitHub Actions</text>
+<text x="460" y="206" text-anchor="middle" font-size="14" font-weight="400" fill="#0f172a">Python 3.12 + requirements</text>
+<rect x="645" y="158" width="220" height="82" rx="10" fill="#eff6ff" stroke="#94a3b8"/>
+<text x="755" y="185" text-anchor="middle" font-size="16" font-weight="700" fill="#0f172a">Django validation</text>
+<text x="755" y="206" text-anchor="middle" font-size="14" font-weight="400" fill="#0f172a">System check + test command</text>
+<rect x="925" y="158" width="220" height="82" rx="10" fill="#fef3c7" stroke="#94a3b8"/>
+<text x="1035" y="185" text-anchor="middle" font-size="16" font-weight="700" fill="#0f172a">Disposable MySQL 8.0</text>
+<text x="1035" y="206" text-anchor="middle" font-size="14" font-weight="400" fill="#0f172a">CI database only</text>
+<path d="M275 199 H345" fill="none" stroke="#64748b" stroke-width="2" marker-end="url(#arrow)"/>
+<path d="M575 199 H645" fill="none" stroke="#64748b" stroke-width="2" marker-end="url(#arrow)"/>
+<path d="M925 199 H865" fill="none" stroke="#64748b" stroke-width="2" marker-end="url(#arrow)"/>
+<text x="55" y="269" font-size="14" fill="#475569">CI currently stops at validation; application tests are a placeholder. No automatic release or repair job is configured.</text>
+<rect x="30" y="310" width="1140" height="255" rx="16" fill="#fff" stroke="#cbd5e1"/><text x="50" y="340" font-size="17" font-weight="700" fill="#334155">02 / MANUAL IMAGE DELIVERY AND INFRASTRUCTURE</text>
+<rect x="55" y="370" width="230" height="78" rx="10" fill="#eff6ff" stroke="#94a3b8"/>
+<text x="170" y="397" text-anchor="middle" font-size="16" font-weight="700" fill="#0f172a">Developer checkout</text>
+<text x="170" y="418" text-anchor="middle" font-size="14" font-weight="400" fill="#0f172a">Application + migrations</text>
+<rect x="365" y="370" width="230" height="78" rx="10" fill="#eff6ff" stroke="#94a3b8"/>
+<text x="480" y="397" text-anchor="middle" font-size="16" font-weight="700" fill="#0f172a">Docker build and push</text>
+<text x="480" y="418" text-anchor="middle" font-size="14" font-weight="400" fill="#0f172a">Versioned application image</text>
+<rect x="685" y="370" width="230" height="78" rx="10" fill="#ecfdf5" stroke="#94a3b8"/>
+<text x="800" y="397" text-anchor="middle" font-size="16" font-weight="700" fill="#0f172a">Container registry</text>
+<text x="800" y="418" text-anchor="middle" font-size="14" font-weight="400" fill="#0f172a">Cluster-accessible image</text>
+<path d="M285 409 H365" fill="none" stroke="#64748b" stroke-width="2" marker-end="url(#arrow)"/>
+<path d="M595 409 H685" fill="none" stroke="#64748b" stroke-width="2" marker-end="url(#arrow)"/>
+<rect x="365" y="478" width="550" height="62" rx="10" fill="#f5f3ff" stroke="#94a3b8"/>
+<text x="640" y="505" text-anchor="middle" font-size="16" font-weight="700" fill="#0f172a">Terraform OR kubectl apply</text>
+<text x="640" y="526" text-anchor="middle" font-size="14" font-weight="400" fill="#0f172a">Existing cluster • choose one resource-management method</text>
+<path d="M170 448 V510 H365" fill="none" stroke="#64748b" stroke-width="2" marker-end="url(#arrow)"/>
+<text x="245" y="497" text-anchor="middle" font-size="13" fill="#475569">Manual apply</text>
+<rect x="30" y="595" width="1140" height="405" rx="16" fill="#fff" stroke="#cbd5e1"/><text x="50" y="625" font-size="17" font-weight="700" fill="#334155">03 / KUBERNETES RUNTIME — NAMESPACE: wrapzy</text>
+<rect x="55" y="657" width="185" height="76" rx="10" fill="#eff6ff" stroke="#94a3b8"/>
+<text x="147.5" y="684" text-anchor="middle" font-size="16" font-weight="700" fill="#0f172a">Browser</text>
+<text x="147.5" y="705" text-anchor="middle" font-size="14" font-weight="400" fill="#0f172a">NodePort or port-forward</text>
+<rect x="305" y="657" width="220" height="76" rx="10" fill="#eff6ff" stroke="#94a3b8"/>
+<text x="415" y="684" text-anchor="middle" font-size="16" font-weight="700" fill="#0f172a">django-service</text>
+<text x="415" y="705" text-anchor="middle" font-size="14" font-weight="400" fill="#0f172a">NodePort → port 8000</text>
+<rect x="600" y="657" width="235" height="76" rx="10" fill="#eff6ff" stroke="#94a3b8"/>
+<text x="717.5" y="684" text-anchor="middle" font-size="16" font-weight="700" fill="#0f172a">Django Deployment</text>
+<text x="717.5" y="705" text-anchor="middle" font-size="14" font-weight="400" fill="#0f172a">1 replica • port 8000</text>
+<rect x="905" y="657" width="240" height="76" rx="10" fill="#f5f3ff" stroke="#94a3b8"/>
+<text x="1025" y="684" text-anchor="middle" font-size="16" font-weight="700" fill="#0f172a">django-secret</text>
+<text x="1025" y="705" text-anchor="middle" font-size="14" font-weight="400" fill="#0f172a">Signing key + admin login</text>
+<path d="M240 695 H305" fill="none" stroke="#64748b" stroke-width="2" marker-end="url(#arrow)"/>
+<text x="273" y="682" text-anchor="middle" font-size="13" fill="#475569">HTTP</text>
+<path d="M525 695 H600" fill="none" stroke="#64748b" stroke-width="2" marker-end="url(#arrow)"/>
+<path d="M905 695 H835" fill="none" stroke="#64748b" stroke-width="2" stroke-dasharray="6 5" marker-end="url(#arrow)"/>
+<text x="869" y="682" text-anchor="middle" font-size="13" fill="#475569">env</text>
+<path d="M800 448 H1155 V633 H718 V657" fill="none" stroke="#64748b" stroke-width="2" stroke-dasharray="6 5" marker-end="url(#arrow)"/>
+<text x="1080" y="620" text-anchor="middle" font-size="13" fill="#475569">Image pull</text>
+<path d="M640 540 V595" fill="none" stroke="#64748b" stroke-width="2" stroke-dasharray="6 5" marker-end="url(#arrow)"/>
+<text x="701" y="582" text-anchor="middle" font-size="13" fill="#475569">Apply resources</text>
+<rect x="600" y="795" width="235" height="76" rx="10" fill="#fef3c7" stroke="#94a3b8"/>
+<text x="717.5" y="822" text-anchor="middle" font-size="16" font-weight="700" fill="#0f172a">mysql-service</text>
+<text x="717.5" y="843" text-anchor="middle" font-size="14" font-weight="400" fill="#0f172a">ClusterIP • port 3306</text>
+<path d="M718 733 V795" fill="none" stroke="#64748b" stroke-width="2" marker-end="url(#arrow)"/>
+<text x="747" y="770" text-anchor="middle" font-size="13" fill="#475569">SQL</text>
+<rect x="305" y="795" width="220" height="76" rx="10" fill="#fef3c7" stroke="#94a3b8"/>
+<text x="415" y="822" text-anchor="middle" font-size="16" font-weight="700" fill="#0f172a">MySQL Deployment</text>
+<text x="415" y="843" text-anchor="middle" font-size="14" font-weight="400" fill="#0f172a">MySQL 8.0 • 1 replica</text>
+<path d="M600 833 H525" fill="none" stroke="#64748b" stroke-width="2" marker-end="url(#arrow)"/>
+<rect x="55" y="795" width="185" height="76" rx="10" fill="#f5f3ff" stroke="#94a3b8"/>
+<text x="147.5" y="822" text-anchor="middle" font-size="16" font-weight="700" fill="#0f172a">mysql-secret</text>
+<text x="147.5" y="843" text-anchor="middle" font-size="14" font-weight="400" fill="#0f172a">Database credentials</text>
+<path d="M240 833 H305" fill="none" stroke="#64748b" stroke-width="2" stroke-dasharray="6 5" marker-end="url(#arrow)"/>
+<text x="273" y="819" text-anchor="middle" font-size="13" fill="#475569">env</text>
+<rect x="305" y="910" width="220" height="65" rx="10" fill="#ecfdf5" stroke="#94a3b8"/>
+<text x="415" y="937" text-anchor="middle" font-size="16" font-weight="700" fill="#0f172a">mysql-pvc</text>
+<text x="415" y="958" text-anchor="middle" font-size="14" font-weight="400" fill="#0f172a">1Gi • ReadWriteOnce</text>
+<path d="M415 871 V910" fill="none" stroke="#64748b" stroke-width="2" marker-end="url(#arrow)"/>
+<rect x="600" y="910" width="235" height="65" rx="10" fill="#ecfdf5" stroke="#94a3b8"/>
+<text x="717.5" y="937" text-anchor="middle" font-size="16" font-weight="700" fill="#0f172a">Persistent volume</text>
+<text x="717.5" y="958" text-anchor="middle" font-size="14" font-weight="400" fill="#0f172a">Mounted at /var/lib/mysql</text>
+<path d="M525 943 H600" fill="none" stroke="#64748b" stroke-width="2" marker-end="url(#arrow)"/>
+<text x="875" y="923" font-size="14" fill="#475569">Django starts with migrate</text><text x="875" y="944" font-size="14" fill="#475569">then the development server.</text><text x="875" y="971" font-size="14" fill="#475569">No health probes configured.</text><text x="40" y="1030" font-size="14" fill="#475569">Solid arrows: execution or traffic flow. Dashed arrows: configuration and image delivery.</text></g></svg>
