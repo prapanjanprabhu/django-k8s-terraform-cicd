@@ -37,25 +37,67 @@ k -n wrapzy rollout status deployment/mysql --timeout=300s
 
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
-k set image -f k8s/django-deployment.yaml "django=$IMAGE" --local -o json > "$work/deployment.json"
 
 # Run migrations once per release, before starting the two application replicas.
-"$PYTHON_BIN" -c '
-import json, sys
-deployment = json.load(sys.stdin)
-pod = deployment["spec"]["template"]["spec"]
-pod["restartPolicy"] = "Never"
-container = pod["containers"][0]
-for key in ("startupProbe", "livenessProbe", "readinessProbe"):
-    container.pop(key, None)
-container["command"] = ["python", "manage.py", "migrate", "--noinput"]
-container.pop("args", None)
-print(json.dumps({"apiVersion": "batch/v1", "kind": "Job",
- "metadata": {"generateName": "django-migrate-", "namespace": "wrapzy"},
- "spec": {"backoffLimit": 0, "activeDeadlineSeconds": 300,
-          "ttlSecondsAfterFinished": 3600, "template": {"spec": pod}}}))
-' < "$work/deployment.json" > "$work/migration.json"
-job=$(k create -f "$work/migration.json" -o name)
+sed "s|IMAGE_PLACEHOLDER|$IMAGE|g" > "$work/migration.yaml" <<'YAML'
+apiVersion: batch/v1
+kind: Job
+metadata:
+  generateName: django-migrate-
+  namespace: wrapzy
+spec:
+  backoffLimit: 0
+  activeDeadlineSeconds: 180
+  ttlSecondsAfterFinished: 3600
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: django
+          image: IMAGE_PLACEHOLDER
+          imagePullPolicy: Always
+          command: ["python", "manage.py", "migrate", "--noinput"]
+          env:
+            - name: DJANGO_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: django-secret
+                  key: DJANGO_SECRET_KEY
+            - name: DB_NAME
+              valueFrom:
+                secretKeyRef:
+                  name: mysql-secret
+                  key: MYSQL_DATABASE
+            - name: DB_USER
+              valueFrom:
+                secretKeyRef:
+                  name: mysql-secret
+                  key: MYSQL_USER
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: mysql-secret
+                  key: MYSQL_PASSWORD
+            - name: DB_HOST
+              value: "mysql-service"
+            - name: DB_PORT
+              value: "3306"
+            - name: DJANGO_DEBUG
+              value: "False"
+            - name: DJANGO_ALLOWED_HOSTS
+              value: "*"
+            - name: ADMIN_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: django-secret
+                  key: ADMIN_USERNAME
+            - name: ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: django-secret
+                  key: ADMIN_PASSWORD
+YAML
+job=$(k create -f "$work/migration.yaml" -o name)
 if ! k -n wrapzy wait --for=condition=complete "$job" --timeout=330s; then
   echo "Migration failed; application deployment was not updated."
   k -n wrapzy logs "$job" --tail=100 || true
@@ -63,12 +105,9 @@ if ! k -n wrapzy wait --for=condition=complete "$job" --timeout=330s; then
 fi
 
 previous=$(k -n wrapzy get deployment django --ignore-not-found -o jsonpath='{.metadata.annotations.deployment\.kubernetes\.io/revision}')
-if [[ -n "$previous" ]]; then
-  # Only use a fully rolled-out deployment as the rollback target.
-  k -n wrapzy rollout status deployment/django --timeout=60s
-fi
 k apply -f k8s/django-service.yaml
-k apply -f "$work/deployment.json"
+k apply -f k8s/django-deployment.yaml
+k -n wrapzy set image deployment/django "django=$IMAGE"
 if ! k -n wrapzy rollout status deployment/django --timeout=330s; then
   k -n wrapzy get pods -l app=django -o wide || true
   if [[ -n "$previous" ]]; then
