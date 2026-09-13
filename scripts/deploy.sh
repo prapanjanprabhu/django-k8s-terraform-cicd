@@ -14,11 +14,15 @@ if [[ -z "$PYTHON_BIN" ]]; then
   fi
 fi
 k() { kubectl --context "$KUBE_CONTEXT" --request-timeout=30s "$@"; }
+log() { echo "[$(date -u +%H:%M:%S)] $*"; }
 
+log "Checking Kubernetes cluster access"
 k cluster-info >/dev/null
+log "Applying namespace"
 k apply -f k8s/namespace.yaml
 # Real secrets are provisioned once outside the repository. Never apply examples.
 for secret in django-secret mysql-secret; do
+  log "Checking Kubernetes secret: $secret"
   k -n wrapzy get secret "$secret" -o json | "$PYTHON_BIN" -c '
 import json, sys, base64
 s = json.load(sys.stdin)
@@ -32,8 +36,10 @@ for key in required:
         sys.exit("Missing or placeholder secret key: " + key)
 '
 done
+log "Applying MySQL resources"
 k apply -f k8s/mysql-pvc.yaml -f k8s/mysql-service.yaml -f k8s/mysql-deployment.yaml
-k -n wrapzy rollout status deployment/mysql --timeout=300s
+log "Waiting for MySQL rollout"
+k -n wrapzy rollout status deployment/mysql --timeout=120s
 
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
@@ -47,7 +53,7 @@ metadata:
   namespace: wrapzy
 spec:
   backoffLimit: 0
-  activeDeadlineSeconds: 180
+  activeDeadlineSeconds: 120
   ttlSecondsAfterFinished: 3600
   template:
     spec:
@@ -97,23 +103,27 @@ spec:
                   name: django-secret
                   key: ADMIN_PASSWORD
 YAML
+log "Running migration job"
 job=$(k create -f "$work/migration.yaml" -o name)
-if ! k -n wrapzy wait --for=condition=complete "$job" --timeout=330s; then
+if ! k -n wrapzy wait --for=condition=complete "$job" --timeout=150s; then
   echo "Migration failed; application deployment was not updated."
   k -n wrapzy logs "$job" --tail=100 || true
   exit 1
 fi
 
 previous=$(k -n wrapzy get deployment django --ignore-not-found -o jsonpath='{.metadata.annotations.deployment\.kubernetes\.io/revision}')
+log "Applying Django service and deployment"
 k apply -f k8s/django-service.yaml
 k apply -f k8s/django-deployment.yaml
+log "Updating Django image to $IMAGE"
 k -n wrapzy set image deployment/django "django=$IMAGE"
-if ! k -n wrapzy rollout status deployment/django --timeout=330s; then
+log "Waiting for Django rollout"
+if ! k -n wrapzy rollout status deployment/django --timeout=180s; then
   k -n wrapzy get pods -l app=django -o wide || true
   if [[ -n "$previous" ]]; then
     echo "Release failed; restoring deployment revision $previous."
     k -n wrapzy rollout undo deployment/django --to-revision="$previous"
-    k -n wrapzy rollout status deployment/django --timeout=330s
+    k -n wrapzy rollout status deployment/django --timeout=120s
   else
     echo "First deployment failed; no previous revision exists to restore."
   fi
