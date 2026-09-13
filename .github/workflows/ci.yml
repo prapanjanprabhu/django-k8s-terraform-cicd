@@ -132,13 +132,20 @@ jobs:
     name: Deploy to Minikube
     needs: publish
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    runs-on: [self-hosted, linux, wrapzy-deploy]
+    runs-on: [self-hosted, wrapzy-deploy]
     environment: minikube
-    timeout-minutes: 25
+    timeout-minutes: 12
     steps:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
+      - name: Check deploy runner access
+        shell: bash
+        env:
+          KUBE_CONTEXT: ${{ vars.KUBE_CONTEXT || 'minikube' }}
+        run: |
+          kubectl --context "${KUBE_CONTEXT:-minikube}" get nodes
+          kubectl --context "${KUBE_CONTEXT:-minikube}" -n wrapzy get pods || true
       - name: Apply resources and verify rollout
         shell: bash
         env:

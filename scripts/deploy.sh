@@ -2,14 +2,24 @@
 set -Eeuo pipefail
 : "${IMAGE:?Set IMAGE to the published image tag}"
 : "${KUBE_CONTEXT:=minikube}"
-command -v python3 >/dev/null
+PYTHON_BIN="${PYTHON_BIN:-}"
+if [[ -z "$PYTHON_BIN" ]]; then
+  if command -v python3 >/dev/null; then
+    PYTHON_BIN=python3
+  elif command -v python >/dev/null; then
+    PYTHON_BIN=python
+  else
+    echo "python3 or python is required for deployment" >&2
+    exit 1
+  fi
+fi
 k() { kubectl --context "$KUBE_CONTEXT" --request-timeout=30s "$@"; }
 
 k cluster-info >/dev/null
 k apply -f k8s/namespace.yaml
 # Real secrets are provisioned once outside the repository. Never apply examples.
 for secret in django-secret mysql-secret; do
-  k -n wrapzy get secret "$secret" -o json | python3 -c '
+  k -n wrapzy get secret "$secret" -o json | "$PYTHON_BIN" -c '
 import json, sys, base64
 s = json.load(sys.stdin)
 required = {
@@ -30,9 +40,9 @@ trap 'rm -rf "$work"' EXIT
 k set image -f k8s/django-deployment.yaml "django=$IMAGE" --local -o json > "$work/deployment.json"
 
 # Run migrations once per release, before starting the two application replicas.
-python3 - "$work/deployment.json" > "$work/migration.json" <<'PY'
+"$PYTHON_BIN" -c '
 import json, sys
-deployment = json.load(open(sys.argv[1]))
+deployment = json.load(sys.stdin)
 pod = deployment["spec"]["template"]["spec"]
 pod["restartPolicy"] = "Never"
 container = pod["containers"][0]
@@ -44,7 +54,7 @@ print(json.dumps({"apiVersion": "batch/v1", "kind": "Job",
  "metadata": {"generateName": "django-migrate-", "namespace": "wrapzy"},
  "spec": {"backoffLimit": 0, "activeDeadlineSeconds": 300,
           "ttlSecondsAfterFinished": 3600, "template": {"spec": pod}}}))
-PY
+' < "$work/deployment.json" > "$work/migration.json"
 job=$(k create -f "$work/migration.json" -o name)
 if ! k -n wrapzy wait --for=condition=complete "$job" --timeout=330s; then
   echo "Migration failed; application deployment was not updated."
