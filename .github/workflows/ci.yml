@@ -1,4 +1,4 @@
-name: Self-Healing CI-CD
+name: Django Kubernetes Terraform CI
 
 on:
   push:
