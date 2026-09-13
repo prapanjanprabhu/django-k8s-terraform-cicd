@@ -6,6 +6,10 @@ __pycache__/
 
 # Environment variables
 .env
+.env.*
+!.env.example
+*.secrets.env
+*.local.yaml
 
 # VS Code
 .vscode/
@@ -25,7 +29,4 @@ crash.*.log
 *.sqlite3
 db.sqlite3
 
-# Django migrations
-**/migrations/*.py
-!**/migrations/__init__.py
-**/migrations/*.pyc
+# Migration source files are versioned for reproducible deployments.

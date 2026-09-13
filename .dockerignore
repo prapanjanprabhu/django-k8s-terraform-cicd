@@ -8,6 +8,13 @@ __pycache__
 venv
 
 .env
+.env.*
+*.secrets.env
+*.local.yaml
+.venv
+.github
+k8s
+terraform
 
 db.sqlite3
 

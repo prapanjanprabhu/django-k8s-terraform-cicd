@@ -7,6 +7,8 @@ metadata:
 
 spec:
   replicas: 1
+  strategy:
+    type: Recreate
 
   selector:
     matchLabels:
@@ -24,6 +26,16 @@ spec:
 
           ports:
             - containerPort: 3306
+
+          readinessProbe:
+            exec:
+              command:
+                - sh
+                - -c
+                - MYSQL_PWD="$MYSQL_PASSWORD" mysql -h 127.0.0.1 -u "$MYSQL_USER" "$MYSQL_DATABASE" -e 'SELECT 1'
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            timeoutSeconds: 3
 
           env:
             - name: MYSQL_ROOT_PASSWORD

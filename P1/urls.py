@@ -17,8 +17,11 @@ Including another URLconf
 
 from django.contrib import admin
 from django.urls import path,include
+from P1 import health
 
 urlpatterns = [
+    path('health/live/', health.live),
+    path('health/ready/', health.ready),
 
     path('', include('gift.urls')),
     

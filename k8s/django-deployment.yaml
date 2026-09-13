@@ -6,7 +6,15 @@ metadata:
   namespace: wrapzy
 
 spec:
-  replicas: 1
+  replicas: 2
+  revisionHistoryLimit: 5
+  minReadySeconds: 10
+  progressDeadlineSeconds: 300
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
 
   selector:
     matchLabels:
@@ -26,6 +34,27 @@ spec:
           ports:
             - containerPort: 8000
 
+          startupProbe:
+            httpGet:
+              path: /health/live/
+              port: 8000
+            periodSeconds: 5
+            failureThreshold: 30
+          livenessProbe:
+            httpGet:
+              path: /health/live/
+              port: 8000
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 3
+          readinessProbe:
+            httpGet:
+              path: /health/ready/
+              port: 8000
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 3
+
           env:
             - name: DJANGO_SECRET_KEY
               valueFrom:
@@ -34,13 +63,22 @@ spec:
                   key: DJANGO_SECRET_KEY
 
             - name: DB_NAME
-              value: "one"
+              valueFrom:
+                secretKeyRef:
+                  name: mysql-secret
+                  key: MYSQL_DATABASE
 
             - name: DB_USER
-              value: "django"
+              valueFrom:
+                secretKeyRef:
+                  name: mysql-secret
+                  key: MYSQL_USER
 
             - name: DB_PASSWORD
-              value: "0098"
+              valueFrom:
+                secretKeyRef:
+                  name: mysql-secret
+                  key: MYSQL_PASSWORD
 
             - name: DB_HOST
               value: "mysql-service"
@@ -68,4 +106,4 @@ spec:
           command: ["sh", "-c"]
 
           args:
-            - python manage.py migrate && python manage.py runserver 0.0.0.0:8000
+            - exec gunicorn P1.wsgi:application --bind 0.0.0.0:8000 --workers 2 --access-logfile -

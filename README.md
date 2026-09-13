@@ -1,4 +1,4 @@
-# Django Kubernetes Terraform CI/CD
+﻿# Django Kubernetes Terraform CI/CD
 
 [![Django CI](https://github.com/prapanjanprabhu/django-k8s-terraform-cicd/actions/workflows/ci.yml/badge.svg)](https://github.com/prapanjanprabhu/django-k8s-terraform-cicd/actions/workflows/ci.yml)
 
@@ -29,7 +29,7 @@ The included application is **Wrapzy**, a gift-shopping website. Its container i
 - Terraform configuration for Kubernetes resources.
 - GitHub Actions checks and tests on pushes and pull requests to `main`.
 
-The current workflow implements CI only: it does not build or publish images, deploy changes, automatically repair code, or roll back releases. Kubernetes Deployments provide basic pod replacement, but the supplied manifests do not define application health probes.
+The workflow tests pushes and pull requests. Successful pushes to `main` also publish a Docker Hub image tagged with the commit SHA and deploy to Minikube. Failed application rollouts restore the previous Deployment revision when one exists. Startup, liveness, and database-aware readiness probes protect rolling updates; this does not automatically repair source code.
 
 ## Architecture
 
@@ -43,14 +43,14 @@ The current workflow implements CI only: it does not build or publish images, de
 
 1. A push or pull request to `main` starts GitHub Actions with Python and a disposable MySQL database.
 2. CI waits for its database, runs Django's system check, and invokes the test command.
-3. The developer builds an application image containing the migration files and pushes it to a container registry.
-4. Terraform or `kubectl` applies the application resources to an existing Kubernetes cluster.
+3. After tests pass on a push to main, Actions builds and publishes the image to Docker Hub.
+4. A self-hosted runner applies Kubernetes resources, runs a migration Job, and verifies the application rollout.
 5. Browser requests reach `django-service`, which routes traffic to the Django pod on port `8000`.
 6. Django connects through `mysql-service:3306`; MySQL stores data on the volume requested by `mysql-pvc`.
 
 | Boundary | Responsibility |
 | --- | --- |
-| GitHub Actions | Validate repository changes using an isolated CI database |
+| GitHub Actions | Test changes, publish images, and deploy successful main-branch pushes |
 | Container registry | Store the application image pulled by Kubernetes |
 | Terraform / Kubernetes manifests | Define and manage deployment resources |
 | Django application | Handle storefront, authentication, carts, and order requests |
@@ -73,8 +73,8 @@ flowchart TB
         Wait --> Check["Django system check"]
         Check --> Tests["Django test command"]
     end
-    Repo -->|"Developer builds locally"| Build["Docker image build"]
-    Build -->|"Manual docker push"| Registry["Container registry"]
+    Tests -->|"Main push only"| Build["Docker image build"]
+    Build -->|"Automatic docker push"| Registry["Container registry"]
     Dev -->|"Choose one deployment method"| Method{"Deployment"}
     Method --> TF["Terraform<br/>Kubernetes provider"]
     Method --> YAML["kubectl apply<br/>k8s manifests"]
@@ -83,7 +83,7 @@ flowchart TB
     Registry -->|"Cluster pulls configured image"| Cluster
 ```
 
-CI runs independently of deployment. Building images, publishing them, and applying infrastructure are manual steps in this repository. Terraform uses the `minikube` kubeconfig context by default.
+Main-branch delivery uses the deployment job and `scripts/deploy.sh`. Terraform remains a separate manual alternative and uses the `minikube` context by default. The overview SVG depicts the earlier manual delivery flow; the workflow is the authoritative implementation.
 
 ### Kubernetes runtime
 
@@ -93,7 +93,7 @@ flowchart LR
     Browser -->|"localhost:8000"| Forward["kubectl port-forward"]
     Forward --> Service
     subgraph Namespace["Kubernetes namespace: wrapzy"]
-        Service["django-service<br/>NodePort / port 8000"] --> Django["Django Deployment<br/>1 replica / port 8000"]
+        Service["django-service<br/>NodePort / port 8000"] --> Django["Django Deployment<br/>2 replicas / port 8000"]
         AppSecret["django-secret<br/>Signing key and admin credentials"] -.->|"Environment variables"| Django
         Django -->|"Database connection"| DBService["mysql-service<br/>ClusterIP / port 3306"]
         DBService --> MySQL["MySQL 8.0 Deployment<br/>1 replica"]
@@ -103,7 +103,7 @@ flowchart LR
     PVC --> PV[("Cluster-provisioned persistent volume")]
 ```
 
-The Django container runs `migrate` before `runserver`. Database connection values are configured separately on the Django Deployment. The raw manifests assign a NodePort automatically; Terraform defaults to `32565`. MySQL is reached through its internal Service.
+A release Job runs migrations once before the Django replicas start Gunicorn. Django and MySQL share database credentials through `mysql-secret`. The raw manifests assign a NodePort automatically; Terraform defaults to `32565`. MySQL is reached through its internal Service.
 
 ### Local development
 
@@ -199,7 +199,7 @@ docker compose run --rm web python manage.py migrate
 docker compose up -d web
 ```
 
-The repository currently contains only `gift/migrations/__init__.py`, so the initial application migration must be generated. Compose mounts the repository into `/app`, so generated migration files are written into your checkout. The current `.gitignore` excludes migration files. To version them, remove the `**/migrations/*.py` ignore rule or explicitly stage the generated migration with `git add -f gift/migrations/0001_initial.py` (use its actual filename). Review and commit migrations before building an image for deployment. Rebuild the image after adding migrations.
+Application migrations are versioned in `gift/migrations/`. After model changes, generate, review, and commit new migrations before pushing; deployed images run those migrations once per release.
 
 Open <http://localhost:8000/>. The custom administrator login is at <http://localhost:8000/admin-login/> and uses `ADMIN_USERNAME` and `ADMIN_PASSWORD`. The standard Django `/admin/` route is not configured.
 
@@ -224,47 +224,57 @@ docker compose run --rm web python manage.py test
 
 Django tests that use a database need permission to create a test database. If the application user lacks that permission, use a dedicated test database account. The CI workflow uses root credentials only for its disposable MySQL service.
 
-The workflow in [`.github/workflows/ci.yml`](.github/workflows/ci.yml) sets up Python 3.12, installs `requirements.txt`, waits for MySQL 8.0, then runs `manage.py check` and `manage.py test`. `gift/tests.py` currently contains only the generated placeholder, so this workflow does not yet provide application behavior coverage.
+The workflow in [`.github/workflows/ci.yml`](.github/workflows/ci.yml) sets up Python 3.12, installs `requirements.txt`, waits for MySQL 8.0, then runs `manage.py check` and `manage.py test`. Health endpoint tests cover liveness, successful database readiness, and database failure. Storefront behavior still needs test coverage.
 
 ## Kubernetes deployment
 
-Prerequisites: a running Kubernetes cluster, `kubectl` configured for that cluster, persistent-volume provisioning, and a container image reachable from the cluster.
+The pipeline automatically publishes and deploys successful pushes to `main` after this one-time setup. Pull requests run tests only.
 
-1. Generate and commit the application migrations using the local setup steps.
-2. Build and push your application image to a registry you control:
+1. In repository **Settings ? Secrets and variables ? Actions**, add `DOCKERHUB_USER` and `DOCKERHUB_TOKEN`. The account/token must be able to push `prapanjanprabhu/wrapzy`. Use a public Docker Hub repository for this demo; private images require an image-pull Secret in both application pods and migration Jobs.
+2. Create a GitHub environment named `minikube`, restricted to the `main` branch. Register a **Linux** self-hosted Actions runner with the custom label `wrapzy-deploy`. On Windows, use a Linux VM or WSL with Bash, Python 3, kubectl, and working cluster connectivity. The runner account must have a kubeconfig that can reach the cluster and manage resources in `wrapzy`. Keep Minikube and the runner running. Set the environment variable **in GitHub's Variables tab** `KUBE_CONTEXT` if the context is not `minikube`.
+3. Provision the namespace and real Secrets using the commands below. The committed `*-secret.yaml` files are examples only; do not apply them or run `kubectl apply -f k8s/`.
+4. Commit and push the changes to `main`. Watch the test, publish, and deploy jobs in Actions. No hosted-runner kubeconfig secret is needed with this local runner design.
 
-   ```bash
-   docker build -t YOUR_REGISTRY/wrapzy:YOUR_TAG .
-   docker push YOUR_REGISTRY/wrapzy:YOUR_TAG
-   ```
+Use a dedicated runner for trusted deployment code. GitHub warns that public-repository self-hosted runners can be compromised by untrusted workflow code; restrict runner access and review workflow changes before merging. See [GitHub runner security guidance](https://docs.github.com/en/actions/reference/security/secure-use).
 
-3. Set that image in `k8s/django-deployment.yaml`. Compose currently names its image `prapanjanprabhu/wrapzy:v1`, while Kubernetes defaults to `prapanjanprabhu/wrapzy:v4`; a local Compose build does not update the cluster image automatically.
-4. Replace the supplied values in `k8s/django-secret.yaml` and `k8s/mysql-secret.yaml`. Match the database name, user, and password in `k8s/django-deployment.yaml` to the MySQL values. The Django database password is currently a literal environment value in that manifest.
-5. Set `DJANGO_ALLOWED_HOSTS` to the hosts you will use. Confirm the cluster can provision the requested `1Gi` MySQL volume.
-6. Apply the resources, starting with the namespace and database:
+Create two private files in the repository root (both are ignored by Git and Docker). Set unique real values in your editor:
 
-```bash
-kubectl apply -f k8s/namespace.yaml
-kubectl apply -f k8s/mysql-secret.yaml
-kubectl apply -f k8s/mysql-pvc.yaml
-kubectl apply -f k8s/mysql-service.yaml
-kubectl apply -f k8s/mysql-deployment.yaml
-kubectl rollout status deployment/mysql -n wrapzy
-kubectl logs deployment/mysql -n wrapzy --tail=50
+```dotenv
+# django.secrets.env
+DJANGO_SECRET_KEY=REPLACE_WITH_PRIVATE_SIGNING_KEY
+ADMIN_USERNAME=REPLACE_WITH_ADMIN_USERNAME
+ADMIN_PASSWORD=REPLACE_WITH_PRIVATE_ADMIN_PASSWORD
 ```
 
-Check the MySQL logs for readiness before starting Django; these manifests have no database readiness probe.
-
-```bash
-kubectl apply -f k8s/django-secret.yaml
-kubectl apply -f k8s/django-service.yaml
-kubectl apply -f k8s/django-deployment.yaml
-kubectl rollout status deployment/django -n wrapzy
-kubectl get pods,svc,pvc -n wrapzy
-kubectl port-forward service/django-service 8000:8000 -n wrapzy
+```dotenv
+# mysql.secrets.env
+MYSQL_ROOT_PASSWORD=REPLACE_WITH_PRIVATE_ROOT_PASSWORD
+MYSQL_DATABASE=one
+MYSQL_USER=django
+MYSQL_PASSWORD=REPLACE_WITH_PRIVATE_DB_PASSWORD
 ```
 
-While port forwarding is running, open <http://localhost:8000/>. The Django container runs migrations before starting the development server. Migration files must already be included in the image.
+Run from Bash in the configured runner environment:
+
+```bash
+kubectl --context minikube apply -f k8s/namespace.yaml
+kubectl --context minikube -n wrapzy create secret generic django-secret --from-env-file=django.secrets.env --dry-run=client -o yaml | kubectl --context minikube apply -f -
+kubectl --context minikube -n wrapzy create secret generic mysql-secret --from-env-file=mysql.secrets.env --dry-run=client -o yaml | kubectl --context minikube apply -f -
+```
+
+For a manual deployment of an already published image, the same script is available:
+
+```bash
+IMAGE=prapanjanprabhu/wrapzy:YOUR_COMMIT_SHA KUBE_CONTEXT=minikube bash scripts/deploy.sh
+kubectl -n wrapzy get pods,svc,pvc,jobs
+kubectl -n wrapzy port-forward service/django-service 8000:8000
+```
+
+Open <http://localhost:8000/>. The rollout uses two replicas, zero unavailable pods, and at most one extra pod. `/health/live/` checks the application process; `/health/ready/` also checks MySQL. A failed rollout triggers an explicit rollback and leaves the workflow failed. Kubernetes itself only reports a stalled rollout; [rollback must be requested](https://kubernetes.io/docs/tasks/run-application/update-deployment-rolling/). A first deployment has no previous revision to restore.
+
+Migration failures stop the release before changing the application Deployment. Rollback restores the pod template, **not database schema, Secrets, or other resources**. Use backward-compatible migrations. For an existing installation with manually created tables, reconcile the initial migration history before enabling delivery; do not blindly fake migrations.
+
+Previously committed credentials must be rotated; replacing files does not remove Git history. For an existing MySQL PVC, change the actual MySQL account passwords as well as the Kubernetes Secret?environment variables only initialize a new database. After rotating runtime Secrets, restart the affected workloads. Restrict `DJANGO_ALLOWED_HOSTS` for your deployment and ensure probe requests use an allowed Host header if you replace the demo wildcard.
 
 ## Terraform deployment alternative
 
@@ -314,6 +324,6 @@ After applying, inspect the outputs with `terraform -chdir=terraform output`. Fo
 
 ## Deployment limitations
 
-The supplied Docker and Kubernetes configurations run Django's development server. Production deployment still needs a production server configuration, static and uploaded-media serving, application health probes, and appropriate host and secret configuration. Gunicorn is listed as a dependency but is not used by the current startup commands.
+The Kubernetes pipeline uses Gunicorn; Docker Compose still uses Django's development server. Production deployment needs static-file and uploaded-media serving, restricted hosts, and appropriate secret management. Django uploads currently lack shared persistent storage, so uploads are not consistent across replicas or replacements.
 
-The checked-in Kubernetes Secret manifests contain credential values. Replace them before deployment and rotate any values that have been used in a real environment. MySQL has persistent storage, but the Django Kubernetes deployment does not mount persistent storage for uploaded media.
+Terraform remains a separate manual configuration and does not inherit the pipeline's probes or rollout settings. Do not manage the same installation with both Terraform and this pipeline. Database backups and backward-compatible migrations are required for safe schema changes.
